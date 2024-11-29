@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Traveling Salesman Problem with PSO</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <!-- Add Leaflet CSS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+        <!-- Add Leaflet JS -->
+        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    </head>
+
+    <body class="bg-gray-100 text-gray-900">
+
+        <div class="container mx-auto py-8">
+            <h1 class="text-2xl font-bold mb-4">Traveling Salesman Problem with PSO</h1>
+
+            <!-- Tabel untuk menampilkan data kota -->
+            <table class="min-w-full bg-white border border-gray-200 mb-8">
+                <thead class="bg-gray-200 text-gray-600">
+                    <tr>
+                        <th class="py-2 px-4 border-b">Kota</th>
+                        <th class="py-2 px-4 border-b">Posisi X</th>
+                        <th class="py-2 px-4 border-b">Posisi Y</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Tabel diisi dengan JavaScript -->
+                </tbody>
+            </table>
+
+            <!-- <input type="number" id="iterationCount" placeholder="Jumlah iterasi"
+                class="border border-gray-300 p-2 mb-4"> -->
+            <!-- Button untuk memulai iterasi -->
+            <button id="iterateButton"
+                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-8">
+                Lakukan Iterasi
+            </button>
+
+            <!-- Tampilkan posisi terbaik dan fitness -->
+            <div id="bestResult" class="bg-white p-4 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-2">Posisi Terbaik</h2>
+                <p><strong>Posisi:</strong> <span id="bestPosition">-</span></p>
+                <p><strong>Fitness:</strong> <span id="bestFitness">-</span></p>
+            </div>
+
+            <!-- Canvas untuk Chart.js -->
+            <canvas id="fitnessChart" width="400" height="200"></canvas>
+
+            <!-- Map Container for Leaflet -->
+            <div id="map" style="height: 800px;" class="my-8"></div>
+        </div>
+
+        <!-- Script utama -->
+        <script type="module">
+            // Mengimpor kelas PSO dari file eksternal
+            import { PSO } from './pso.js';
+
+            // Daftar nama kota dan koordinatnya
+            const cities = ["Surabaya", "Probolinggo", "Malang", "Madiun", "Tuban", "Sumenep"];
+            const coordinates = {
+                "Surabaya": { x: -7.250445, y: 112.768845 },
+                "Probolinggo": { x: -7.754669, y: 113.215913 },
+                "Malang": { x: -7.966620, y: 112.632632 },
+                "Madiun": { x: -7.631573, y: 111.529809 },
+                "Tuban": { x: -6.967195, y: 112.038849 },
+                "Sumenep": { x: -7.004613, y: 113.849285 }
+            };
+
+            // Menampilkan data kota di tabel
+            const tableBody = document.getElementById("table-body");
+            cities.forEach(city => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+            <td class="py-2 px-4 border-b">${city}</td>
+            <td class="py-2 px-4 border-b">${coordinates[city].x}</td>
+            <td class="py-2 px-4 border-b">${coordinates[city].y}</td>
+        `;
+                tableBody.appendChild(row);
+            });
+
+            // Inisialisasi PSO
+            const pso = new PSO(30, 6); // 30 partikel dan 6 dimensi (6 kota)
+            const fitnessValues = [];
+
+            // Menyiapkan Chart.js
+            const ctx = document.getElementById('fitnessChart').getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Fitness Terbaik',
+                        data: fitnessValues,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 2,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Iterasi'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Fitness'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Fungsi untuk memperbarui chart
+            function updateChart() {
+                chart.data.labels.push(chart.data.labels.length + 1);
+                chart.data.datasets[0].data.push(pso.gbestFitness);
+                chart.update();
+            }
+
+            // Fungsi untuk memperbarui posisi terbaik dan fitness
+            function updateBestResult() {
+                const bestPositionElement = document.getElementById("bestPosition");
+                const bestFitnessElement = document.getElementById("bestFitness");
+
+                // Mengonversi indeks posisi terbaik menjadi nama kota
+                const bestCities = pso.gbestPosition.map(index => cities[index]);
+                bestPositionElement.textContent = bestCities.join(' → '); // Format nama kota
+                bestFitnessElement.textContent = pso.gbestFitness.toFixed(2); // Format fitness dengan 2 angka desimal
+            }
+
+            // Setup Leaflet Map
+            const map = L.map('map').setView([coordinates["Surabaya"].x, coordinates["Surabaya"].y], 9);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+            // Add city markers to the map
+            const cityMarkers = {};
+            cities.forEach(city => {
+                cityMarkers[city] = L.marker([coordinates[city].x, coordinates[city].y]).addTo(map)
+                    .bindPopup(`<b>${city}</b><br>${coordinates[city].x}, ${coordinates[city].y}`);
+            });
+
+            // Line to display the path
+            let pathLine = L.polyline([], { color: 'blue', weight: 4 }).addTo(map);
+
+            document.getElementById("iterateButton").addEventListener("click", () => {
+                const iterationCount = 20;
+                //  const iterationCount = parseInt(document.getElementById("iterationCount").value, 10);
+                if (isNaN(iterationCount) || iterationCount <= 0) {
+                    alert("Masukkan jumlah iterasi yang valid.");
+                    return;
+                }
+
+                let currentIteration = 0;
+                const intervalId = setInterval(() => {
+                    if (currentIteration >= iterationCount) {
+                        clearInterval(intervalId);
+                    } else {
+                        pso.mainPSO();
+                        updateChart();
+                        updateBestResult();
+
+                        // Update path on the map
+                        const bestPath = pso.gbestPosition.map(index => cities[index]);
+                        const pathCoordinates = bestPath.map(city => [coordinates[city].x, coordinates[city].y]);
+                        pathLine.setLatLngs(pathCoordinates);
+
+                        currentIteration++;
+                    }
+                }, 500);
+            });
+        </script>
+
+    </body>
+
+</html>
